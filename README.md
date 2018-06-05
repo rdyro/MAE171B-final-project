@@ -2,7 +2,7 @@
 
 Designing a state-observer model controller for a system
 
-$\ddot{y} + a1 \dot{y} + a0 y = b0 u$
+![Image](readme_data/sys_eq.png)
 
 The system is supposed to describe a linearized model of an inverted pendulum.
 
