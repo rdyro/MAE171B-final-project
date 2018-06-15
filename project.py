@@ -115,6 +115,9 @@ Cd = C
 Ad = sp.Matrix(Ad)
 Bd = sp.Matrix(Bd)
 Cd = sp.Matrix(Cd)
+
+sp.pprint(Ad)
+sp.pprint(Bd)
 ###############################################################################
 
 ###############################################################################
@@ -152,6 +155,8 @@ keq2 = keq.coeffs()[2] / keq.coeffs()[0] - (pole1 * pole2)
 ksol = sp.solve([keq1, keq2], [k1, k2])
 Kd = sp.Matrix([
   [ksol[k1], ksol[k2]]])
+print("Kd = ")
+sp.pprint(Kd)
 
 plt.figure(1)
 dbode((Kd * (z * sp.eye(Ad.shape[0]) - Ad).inv() * Bd)[0], z, Tn)
@@ -183,9 +188,8 @@ sp.pprint(lsol)
 Ld = sp.Matrix([
   [lsol[l1]],
   [lsol[l2]]])
-sp.pprint(Ad - Ld * Cd)
-eig = np.array([complex(e) for e in (Ad - Ld * Cd).eigenvals()])
-print(eig)
+print("Ld = ")
+sp.pprint(Ld)
 ###############################################################################
 
 ###############################################################################

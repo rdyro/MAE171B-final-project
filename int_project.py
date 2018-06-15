@@ -1,4 +1,5 @@
 import time
+import sys
 
 t_import1 = time.time()
 import sympy as sp
@@ -115,6 +116,10 @@ Ba = sp.Matrix(Bd).col_join(sp.Matrix([[0]]))
 Ca = sp.Matrix(Cd).row_join(sp.Matrix([[0]]))
 t_c2d2 = time.time()
 print("Converting c2d takes %f" % (t_c2d2 - t_c2d1))
+print("A, B, C = ")
+sp.pprint(Aa)
+sp.pprint(Ba)
+sp.pprint(Ca)
 ###############################################################################
 
 ###############################################################################
@@ -139,6 +144,7 @@ keq3 = keq.coeffs()[3] / keq.coeffs()[0] - (-p1 * p2 * p3)
 ksol = sp.solve([keq1, keq2, keq3], [k1, k2, k3])
 Ka = sp.Matrix([
   [ksol[k1], ksol[k2], ksol[k3]]])
+sp.pprint(Ka)
 t_kplace2 = time.time()
 print("Placing K poles takes %f" % (t_kplace2 - t_kplace1))
 ###############################################################################
@@ -180,6 +186,8 @@ Ld = sp.Matrix([
   [lsol[l1]],
   [lsol[l2]]])
 La = Ld.col_join(sp.Matrix([[0]]))
+print("La = ")
+sp.pprint(La)
 t_lplace2 = time.time()
 print("Placing L poles takes %f" % (t_lplace2 - t_lplace1))
 ###############################################################################
@@ -209,7 +217,7 @@ x0 = np.array([
 def u_fun(k):
   return 0.5
 n = 600
-k, y = dsim(Aa - Ba * Ka, Na, Ca, 1, x0, u_fun, n)
+k, y = dsim(Aa - Ba * Ka * 1.1, Na, Ca, 1, x0, u_fun, n)
 plt.figure(5)
 plt.plot(k, y)
 
