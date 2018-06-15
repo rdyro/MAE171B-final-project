@@ -1,10 +1,17 @@
 import sympy as sp
 import numpy as np
 from scipy.optimize import fsolve
+from scipy.signal import filtfilt
 import matplotlib.pyplot as plt
 import time
 import sys
 
+plt.rcParams["figure.figsize"] = (15, 9)
+plt.rcParams["axes.labelsize"] = 20
+plt.rcParams["xtick.labelsize"] = 20
+plt.rcParams["ytick.labelsize"] = 20
+plt.rcParams["lines.linewidth"] = 3
+plt.rcParams["legend.fontsize"] = 20
 
 ###############################################################################
 def dbode(G, z, T):
@@ -16,11 +23,12 @@ def dbode(G, z, T):
   Gabs = np.abs(Gnum)
   Gang = np.angle(Gnum)
 
-  fig = plt.gcf()
-  ax1 = fig.add_subplot(211)
-  ax2 = fig.add_subplot(212)
-  ax1.semilogx(w, np.log10(Gabs) * 20.0)
-  ax2.semilogx(w, np.remainder(Gang / np.pi * 180.0, 360.0))
+  f, axarr = plt.subplots(2, sharex=True)
+  axarr[0].semilogx(w, np.log10(Gabs) * 20.0)
+  axarr[0].set_ylabel("Gain (dB)")
+  axarr[1].semilogx(w, np.remainder(Gang / np.pi * 180.0, 360.0))
+  axarr[1].set_ylabel("Angle (deg)")
+  axarr[1].set_xlabel("Frequency, $\\omega$ (rad/s)")
 
 def dmargin(G, z, T):
   max_w = (2.0 * np.pi / T) / 2.0
@@ -60,21 +68,26 @@ def normalize_poly(poly):
   den /= den.coeffs()[0]
   return num / den
 
-def dsim(Ad, Bd, Cd, Nd, x0, u_fun, n):
-  Ad = np.array(Ad).astype(np.float64)
-  Bd = np.array(Bd).astype(np.float64)
-  Cd = np.array(Cd).astype(np.float64)
-  Nd = np.array(Nd).astype(np.float64)
+###############################################################################
+def dsim(A, B, K, C, N, x0, r_fun, n):
+  A = np.array(A).astype(np.float64)
+  B = np.array(B).astype(np.float64)
+  K = np.array(K).astype(np.float64)
+  C = np.array(C).astype(np.float64)
+  N = np.array(N).astype(np.float64)
 
-  path = np.zeros(n)
+  y = np.zeros(n * 2)
+  u = np.zeros(n * 2)
   x = x0
   for k in range(n):
-    path[k] = Cd.dot(x)[0]
-    x = Ad.dot(x) + Bd.dot(Nd).dot(u_fun(k))
-  return path
-###############################################################################
-
-
+    y[2 * k] = C.dot(x)[0]
+    y[2 * k + 1] = y[2 * k]
+    u[2 * k] = K.dot(x) + N.dot(r_fun(k))
+    u[2 * k + 1] = K.dot(x) + N.dot(r_fun(k))
+    x = (A - B.dot(K)).dot(x) + B.dot(N).dot(r_fun(k))
+  k = np.repeat(np.arange(n), 2)
+  k[1::2] += 1
+  return k, y, u
 ###############################################################################
 Tn = 1e-3
 T = sp.symbols("T")
@@ -99,6 +112,13 @@ B = np.array([
 C = np.array([
   [1, 0]])
 
+print("A = ")
+print(A)
+print("B = ")
+print(B)
+print("C = ")
+print(C)
+
 # compute state transistion matrix via diagonalization
 def diagonalize(A):
   val, vec = np.linalg.eig(A)
@@ -108,6 +128,13 @@ def diagonalize(A):
 
 M, D = diagonalize(A)
 Minv = np.linalg.inv(M)
+print("M = ")
+print(M)
+print("D = ")
+print(D)
+print("M^-1 = ")
+print(Minv)
+
 Ad = M.dot(np.diag(np.exp(np.diag(D) * Tn))).dot(Minv)
 Bd = M.dot(np.diag((np.exp(np.diag(D) * Tn) - 1.0) / np.diag(D))).dot(Minv).dot(B)
 Cd = C
@@ -116,13 +143,18 @@ Ad = sp.Matrix(Ad)
 Bd = sp.Matrix(Bd)
 Cd = sp.Matrix(Cd)
 
+print("Ad = ")
 sp.pprint(Ad)
+print("Bd = ")
 sp.pprint(Bd)
+print("Cd = ")
+sp.pprint(Cd)
 ###############################################################################
 
 ###############################################################################
 # find G(z) by state space
 Gz1 = normalize_poly((Cd * (z * sp.eye(2) - Ad).inv() * Bd)[0])
+print("Gz = ")
 sp.pprint(Gz1)
 
 
@@ -138,7 +170,7 @@ b = -a
 Gz2 = b2 * (a / -p[0] * (1 - sp.exp(p[0] * T)) / (z - sp.exp(p[0] * T)) +
     b / -p[1] * (1 - sp.exp(p[1] * T)) / (z - sp.exp(p[1] * T)))
 Gz2 = normalize_poly(Gz2.subs({T: Tn}))
-sp.pprint(Gz2)
+#sp.pprint(Gz2)
 ###############################################################################
 
 ###############################################################################
@@ -158,15 +190,36 @@ Kd = sp.Matrix([
 print("Kd = ")
 sp.pprint(Kd)
 
-plt.figure(1)
-dbode((Kd * (z * sp.eye(Ad.shape[0]) - Ad).inv() * Bd)[0], z, Tn)
-dmargin((Kd * (z * sp.eye(Ad.shape[0]) - Ad).inv() * Bd)[0], z, Tn)
-#plt.show()
+Lz = normalize_poly((Kd * (z * sp.eye(Ad.shape[0]) - Ad).inv() * Bd)[0])
+
+Sz = normalize_poly(1 / (1 + Lz))
+max_w = (2.0 * np.pi / Tn) / 2.0
+w = np.logspace(-2, np.log10(max_w), 100000)
+Sz_fun = sp.lambdify(z, Sz, "numpy")
+Sznum = Sz_fun(np.exp(1j * w * Tn))
+Szabs = np.abs(Sznum)
+print("Max Sz = %.5e" % np.max(Szabs))
+VGM = np.max(Szabs) / (np.max(Szabs) - 1.0)
+print("VGM = %.5e" % VGM)
+
+print("Lz = ")
+sp.pprint(Lz)
+
+dbode(Lz, z, Tn)
+dmargin(Lz, z, Tn)
+plt.savefig("graph/pd_feedback_Lz.png")
+
+dbode(Sz, z, Tn)
+dmargin(Sz, z, Tn)
+plt.savefig("graph/pd_feedback_Sz.png")
 ###############################################################################
 
 ###############################################################################
 # compute the feedforward gain
 Nd = 1.0 / (Cd * (sp.eye(Ad.shape[0]) - (Ad - Bd * Kd)).inv() * Bd)[0]
+Gcl = normalize_poly((Cd * (z * sp.eye(Ad.shape[0]) - (Ad - Bd * Kd)).inv() * Bd)[0])
+print("Gcl = ")
+sp.pprint(Gcl)
 print("Nd = %.5e" % Nd)
 ###############################################################################
 
@@ -196,10 +249,28 @@ sp.pprint(Ld)
 # get the GM and PM for the state observer system
 Lz = (Kd * (z * sp.eye(Ad.shape[0]) - (Ad - Ld * Cd - Bd * Kd)).inv() * Ld * Cd
     * (z * sp.eye(Ad.shape[0]) - Ad).inv() * Bd)[0]
-Lz = sp.simplify(Lz)
-plt.figure(1)
+Lz = normalize_poly(Lz)
+Sz = normalize_poly(1 / (1 + Lz))
+
+Sz = normalize_poly(1 / (1 + Lz))
+max_w = (2.0 * np.pi / Tn) / 2.0
+w = np.logspace(-2, np.log10(max_w), 100000)
+Sz_fun = sp.lambdify(z, Sz, "numpy")
+Sznum = Sz_fun(np.exp(1j * w * Tn))
+Szabs = np.abs(Sznum)
+print("Max Sz = %.5e" % np.max(Szabs))
+VGM = np.max(Szabs) / (np.max(Szabs) - 1.0)
+print("VGM = %.5e" % VGM)
+
+print("Lz = ")
+sp.pprint(Lz)
+
 dbode(Lz, z, Tn)
 dmargin(Lz, z, Tn)
+plt.savefig("graph/pd_observer_Lz.png")
+
+dbode(Sz, z, Tn)
+plt.savefig("graph/pd_observer_Sz.png")
 ###############################################################################
 
 ###############################################################################
@@ -207,16 +278,59 @@ dmargin(Lz, z, Tn)
 x0 = np.array([
   [0],
   [0]])
-def u_fun(k):
-  return 0.5
-n = 300
-path = dsim(Ad - Bd * Kd, Bd, Cd, Nd, x0, u_fun, n)
-plt.figure(5)
-plt.plot(range(n), path)
+n = 10000 - 10
 
-path = dsim(Ad - Ld * Cd, Ld, Cd, 1, x0, u_fun, n)
-plt.figure(6)
-plt.plot(range(n), path)
+data = np.loadtxt("data/PD_control_867.txt")
+k_exp = (data[:, 0] / 1e-3).astype(np.int)
+r_exp = data[:, 1] / 8.67
+y_exp = data[:, 2]
+u_exp = data[:, 3]
+
+def r_fun(k):
+  return r_exp[k]
+
+
+N = 100
+b = 1.0 / N * np.ones(N)
+a = 1
+
+yf_exp = filtfilt(b, a, y_exp)
+
+k, y, u = dsim(Ad, Bd, Kd, Cd, Nd, x0, r_fun, n)
+plt.figure(10)
+plt.plot(k_exp, r_exp, label="Reference")
+plt.plot(k_exp, y_exp, label="Output Raw")
+plt.plot(k_exp, yf_exp, label="Ouput Filtered")
+plt.plot(k, y, label="Simulated Output")
+plt.xlabel("Time, k ($\\times 10^{-3}$ s)")
+plt.ylabel("Angular Position (rad)")
+plt.legend()
+plt.savefig("graph/pd_y.png")
+
+N = 30
+b = 1.0 / N * np.ones(N)
+a = 1
+
+uf_exp = filtfilt(b, a, u_exp)
+
+plt.figure(11)
+plt.plot(k_exp, u_exp, label="Input raw")
+plt.plot(k_exp, uf_exp, label="Input filtered")
+plt.plot(k, u, label="Simulated Input")
+plt.xlabel("Time, k ($\\times 10^{-3}$ s)")
+plt.ylabel("Duty Cycle (1)")
+plt.legend()
+plt.savefig("graph/pd_u.png")
+
+def r2_fun(k):
+  return 0.025
+k, y, u = dsim(Ad, Bd, Kd, Cd, Nd, x0, r2_fun, n)
+
+plt.figure(12)
+plt.plot(k, u)
+
+plt.figure(13)
+plt.plot(k, y)
 
 plt.show()
 ###############################################################################

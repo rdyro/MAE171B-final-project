@@ -2,6 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import filtfilt
 
+plt.rcParams["figure.figsize"] = (15, 9)
+plt.rcParams["axes.labelsize"] = 20
+plt.rcParams["xtick.labelsize"] = 20
+plt.rcParams["ytick.labelsize"] = 20
+plt.rcParams["lines.linewidth"] = 3
+plt.rcParams["legend.fontsize"] = 20
+
 ########################### SYSTEM IDENTIFICATION #############################
 # load the data from the csv file
 data = np.loadtxt("data/step_response.txt")
@@ -52,11 +59,22 @@ a = 1
 b = 1.0 / N * np.ones(N)
 wf = filtfilt(b, a, w)
 
+print(tw.shape)
+print(w.shape)
+print(wf.shape)
+np.savetxt("data/sys_id.txt", np.vstack([tw, w, wf, k * (1.0 - np.exp(-tw /
+  tau))]).T)
+
 # plot and display to compare if the fit makes sense
 plt.figure(0)
-plt.plot(tw, wf)
-plt.plot([x[0], x[-1]], [y_max, y_max])
-plt.plot(x, k * (1.0 - np.exp(-x / tau)))
+plt.plot(tw, w, label="Raw data")
+plt.plot(tw, wf, label="Filtered data")
+plt.plot([x[0], x[-1]], [y_max, y_max], label="Final value")
+plt.plot(x, k * (1.0 - np.exp(-x / tau)), label="Exponential fit")
+plt.xlabel("Time (s)")
+plt.ylabel("Angular Speed (rad/s)")
+plt.legend()
+plt.savefig("graph/sys_id.png")
 ###############################################################################
 
 
@@ -66,6 +84,8 @@ Vs = 10.7
 J_inertia = 2.33e-5
 K = Vs / k
 R = K**2 * tau / J_inertia
+print("R = %.5e" % R)
+print("K = %.5e" % K)
 
 l_c = 2.54e-2
 m = 4.4e-2
@@ -84,6 +104,7 @@ print("a0 = %.5e" % a0)
 print("b0 = %.5e" % b0)
 np.savetxt("data/sys_coeff.txt", np.array([a1, a0, b0]).reshape((1, 3)))
 
+"""
 # find the poles of the system
 p = np.roots([1, a1, a0])
 print("")
@@ -91,6 +112,7 @@ print("Poles of the system")
 print("ddy + a1 dy + a0 dy = b0 u")
 print("p1 = %.5e, p2 = %.5e" % (p[0], p[1]))
 np.savetxt("data/sys_poles.txt", np.array([p[0], p[1]]).reshape((1, 2)))
+"""
 ###############################################################################
 
 plt.show()
